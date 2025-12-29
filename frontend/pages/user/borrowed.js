@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
-import Link from 'next/link';
-import { useAuth } from '../../context/AuthContext';
-import Layout from '../../components/Layout';
-import { api } from '../../lib/api';
-import styles from '../../styles/Dashboard.module.css';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import Link from "next/link";
+import { useAuth } from "../../context/AuthContext";
+import Layout from "../../components/Layout";
+import { api } from "../../lib/api";
+import styles from "../../styles/Dashboard.module.css";
 
 export default function BorrowedBooks() {
   const { user } = useAuth();
@@ -13,51 +13,69 @@ export default function BorrowedBooks() {
   const [books, setBooks] = useState({});
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [returning, setReturning] = useState(false);
 
   useEffect(() => {
+    // 1. Nếu chưa có user (chưa login) -> đá về trang login
     if (!user) {
-      router.push('/auth/login');
+      router.push("/auth/login");
       return;
     }
-    loadBorrowedBooks();
+
+    // 2. [QUAN TRỌNG] Kiểm tra xem session có bị cũ (thiếu ID) không
+    if (user && !user.id) {
+      console.warn("⚠️ User data thiếu ID. Có thể do phiên đăng nhập cũ.");
+      alert(
+        "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."
+      );
+      // Redirect về login để user lấy lại token mới có ID
+      router.push("/auth/login");
+      return;
+    }
+
+    // 3. Nếu đủ ID thì mới gọi API
+    if (user.id) {
+      console.log("✅ User OK (ID: " + user.id + "), đang tải dữ liệu...");
+      loadBorrowedBooks();
+    }
   }, [user]);
 
   const loadBorrowedBooks = async () => {
     setLoading(true);
-    const result = await api.listBorrowRequests();
-    
-    if (result.ok && result.data?.status === 'success') {
-      const allRequests = result.data.data || [];
-      const userRequests = allRequests.filter((req) => req.user_id === getUserId());
-      setRequests(userRequests);
+    try {
+      const result = await api.listBorrowRequests();
 
-      // Load book details
-      const bookIds = [...new Set(userRequests.map((req) => req.book_id))];
-      const bookData = {};
-      for (const id of bookIds) {
-        const bookResult = await api.getBook(id);
-        if (bookResult.ok && bookResult.data?.status === 'success') {
-          bookData[id] = bookResult.data.data;
+      if (result.ok && result.data?.status === "success") {
+        const allRequests = result.data.data || [];
+
+        // Chỉ lấy request của user hiện tại
+        const userRequests = allRequests.filter(
+          (req) => req.user_id === user.id
+        );
+        setRequests(userRequests);
+
+        // Load thông tin chi tiết từng cuốn sách
+        const bookIds = [...new Set(userRequests.map((req) => req.book_id))];
+        const bookData = {};
+        for (const id of bookIds) {
+          const bookResult = await api.getBook(id);
+          if (bookResult.ok && bookResult.data?.status === "success") {
+            bookData[id] = bookResult.data.data;
+          }
         }
+        setBooks(bookData);
       }
-      setBooks(bookData);
+    } catch (err) {
+      console.error("Lỗi khi tải sách:", err);
     }
     setLoading(false);
-  };
-
-  const getUserId = () => {
-    // In a real app, this would come from auth context or API
-    // For now, we'll use a workaround by checking username
-    const req = requests.find((r) => r.user_id);
-    return req?.user_id || 1;
   };
 
   const handleReturn = async () => {
     if (!selectedRequest) return;
     setReturning(true);
-    setError('');
+    setError("");
 
     const result = await api.requestReturn(
       { username: user.username, password: user.password },
@@ -65,32 +83,32 @@ export default function BorrowedBooks() {
     );
     setReturning(false);
 
-    if (result.ok && result.data?.status === 'success') {
-      alert('Đã gửi yêu cầu trả sách!');
+    if (result.ok && result.data?.status === "success") {
+      alert("Đã gửi yêu cầu trả sách!");
       loadBorrowedBooks();
     } else {
-      setError(result.data?.message || 'Không thể gửi yêu cầu trả sách');
+      setError(result.data?.message || "Không thể gửi yêu cầu trả sách");
     }
   };
 
   const getStatusText = (status) => {
     const statusMap = {
-      pending: 'Đang chờ duyệt',
-      approved: 'Đã duyệt',
-      return_requested: 'Đang chờ xác nhận trả',
-      returned: 'Đã trả',
+      pending: "Đang chờ duyệt",
+      approved: "Đã duyệt",
+      return_requested: "Đang chờ xác nhận trả",
+      returned: "Đã trả",
     };
     return statusMap[status] || status;
   };
 
   const getStatusColor = (status) => {
     const colorMap = {
-      pending: '#f59e0b',
-      approved: '#10b981',
-      return_requested: '#3b82f6',
-      returned: '#6b7280',
+      pending: "#f59e0b",
+      approved: "#10b981",
+      return_requested: "#3b82f6",
+      returned: "#6b7280",
     };
-    return colorMap[status] || '#6b7280';
+    return colorMap[status] || "#6b7280";
   };
 
   const selectedBook = selectedRequest ? books[selectedRequest.book_id] : null;
@@ -99,30 +117,38 @@ export default function BorrowedBooks() {
     <Layout>
       <div className={styles.dashboard}>
         <div className={styles.leftPanel}>
-          <h2 style={{ marginBottom: '16px', fontSize: '18px' }}>Sách đã mượn</h2>
+          <h2 style={{ marginBottom: "16px", fontSize: "18px" }}>
+            Sách đã mượn
+          </h2>
 
           <div className={styles.bookList}>
             {loading && <div className={styles.loading}>Đang tải...</div>}
+
             {!loading && requests.length === 0 && (
               <div className={styles.emptyState}>
                 <div className={styles.emptyIcon}>📚</div>
                 <div>Bạn chưa mượn sách nào</div>
               </div>
             )}
+
             {requests.map((request) => {
               const book = books[request.book_id];
+              // Nếu sách chưa tải xong info thì hiện placeholder hoặc ẩn
               if (!book) return null;
 
               return (
                 <div
                   key={request.id}
                   className={`${styles.bookCard} ${
-                    selectedRequest?.id === request.id ? styles.active : ''
+                    selectedRequest?.id === request.id ? styles.active : ""
                   }`}
                   onClick={() => setSelectedRequest(request)}
                 >
                   <img
-                    src={book.url_image || 'https://picsum.photos/seed/default/400/600'}
+                    src={
+                      book.url_image ||
+                      "https://picsum.photos/seed/default/400/600"
+                    }
                     alt={book.title}
                     className={styles.bookCover}
                   />
@@ -136,7 +162,9 @@ export default function BorrowedBooks() {
                       >
                         {getStatusText(request.status)}
                       </span>
-                      <span className={styles.bookBadge}>Req ID: {request.id}</span>
+                      <span className={styles.bookBadge}>
+                        Req ID: {request.id}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -157,22 +185,27 @@ export default function BorrowedBooks() {
             <>
               {error && <div className={styles.error}>{error}</div>}
               <img
-                src={selectedBook.url_image || 'https://picsum.photos/seed/default/400/600'}
+                src={
+                  selectedBook.url_image ||
+                  "https://picsum.photos/seed/default/400/600"
+                }
                 alt={selectedBook.title}
                 className={styles.detailCover}
               />
               <h1 className={styles.detailTitle}>{selectedBook.title}</h1>
-              <div className={styles.detailAuthor}>Tác giả: {selectedBook.author}</div>
+              <div className={styles.detailAuthor}>
+                Tác giả: {selectedBook.author}
+              </div>
 
               <div className={styles.detailSection}>
                 <h3>Trạng thái</h3>
                 <div
                   style={{
-                    display: 'inline-block',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
+                    display: "inline-block",
+                    padding: "8px 16px",
+                    borderRadius: "8px",
                     background: getStatusColor(selectedRequest.status),
-                    color: 'white',
+                    color: "white",
                     fontWeight: 500,
                   }}
                 >
@@ -183,7 +216,7 @@ export default function BorrowedBooks() {
               <div className={styles.detailSection}>
                 <h3>Mô tả</h3>
                 <p className={styles.detailDescription}>
-                  {selectedBook.description || 'Chưa có mô tả'}
+                  {selectedBook.description || "Chưa có mô tả"}
                 </p>
               </div>
 
@@ -192,7 +225,9 @@ export default function BorrowedBooks() {
                 <div className={styles.detailStats}>
                   <div className={styles.statItem}>
                     <span className={styles.statLabel}>Request ID</span>
-                    <span className={styles.statValue}>{selectedRequest.id}</span>
+                    <span className={styles.statValue}>
+                      {selectedRequest.id}
+                    </span>
                   </div>
                   <div className={styles.statItem}>
                     <span className={styles.statLabel}>Book ID</span>
@@ -201,25 +236,27 @@ export default function BorrowedBooks() {
                   {selectedRequest.rating && (
                     <div className={styles.statItem}>
                       <span className={styles.statLabel}>Đánh giá</span>
-                      <span className={styles.statValue}>⭐ {selectedRequest.rating}</span>
+                      <span className={styles.statValue}>
+                        ⭐ {selectedRequest.rating}
+                      </span>
                     </div>
                   )}
                 </div>
               </div>
 
               <div className={styles.detailActions}>
-                {selectedRequest.status === 'approved' && (
+                {selectedRequest.status === "approved" && (
                   <button onClick={handleReturn} disabled={returning}>
-                    {returning ? 'Đang xử lý...' : 'Yêu cầu trả sách'}
+                    {returning ? "Đang xử lý..." : "Yêu cầu trả sách"}
                   </button>
                 )}
-                {selectedRequest.status === 'return_requested' && (
+                {selectedRequest.status === "return_requested" && (
                   <button disabled>Đang chờ xác nhận trả</button>
                 )}
-                {selectedRequest.status === 'returned' && (
+                {selectedRequest.status === "returned" && (
                   <button disabled>Đã trả sách</button>
                 )}
-                {selectedRequest.status === 'pending' && (
+                {selectedRequest.status === "pending" && (
                   <button disabled>Đang chờ duyệt</button>
                 )}
                 <Link href={`/books/${selectedBook.id}`}>

@@ -1,34 +1,41 @@
-import { useState } from 'react';
-import { useRouter } from 'next/router';
-import Link from 'next/link';
-import { useAuth } from '../../context/AuthContext';
-import { api } from '../../lib/api';
-import styles from '../../styles/Auth.module.css';
+import { useState } from "react";
+import { useRouter } from "next/router";
+import Link from "next/link";
+import { useAuth } from "../../context/AuthContext";
+import { api } from "../../lib/api";
+import styles from "../../styles/Auth.module.css";
 
 export default function Login() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login } = useAuth(); // Hàm login từ AuthContext
   const router = useRouter();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     const result = await api.login(username, password);
     setLoading(false);
 
-    if (result.ok && result.data?.status === 'success') {
+    if (result.ok && result.data?.status === "success") {
+      // --- ĐOẠN CẦN SỬA Ở ĐÂY ---
+      // Lấy dữ liệu trả về từ backend
+      const userData = result.data.data;
+
+      // Gọi hàm login của Context và truyền ĐẦY ĐỦ thông tin (bao gồm id)
       login({
-        username,
-        password,
-        role: result.data.data.role,
+        id: userData.id, // QUAN TRỌNG: Phải có dòng này
+        username: userData.username, // Lấy từ response backend cho chuẩn
+        role: userData.role,
+        password: password, // (Tùy chọn: thường không nên lưu password ở client nếu không cần thiết, nhưng code cũ của bạn có dùng)
       });
+      // --------------------------
     } else {
-      setError(result.data?.message || 'Login failed');
+      setError(result.data?.message || "Login failed");
     }
   };
 
@@ -64,8 +71,12 @@ export default function Login() {
             />
           </div>
 
-          <button type="submit" className={styles.authButton} disabled={loading}>
-            {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+          <button
+            type="submit"
+            className={styles.authButton}
+            disabled={loading}
+          >
+            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
           </button>
         </form>
 
