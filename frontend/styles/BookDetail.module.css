@@ -1,0 +1,237 @@
+.bookDetail {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 32px;
+  background: var(--bg-secondary);
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.backButton:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.bookContent {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 48px;
+  margin-bottom: 48px;
+}
+
+.bookCoverSection img {
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.bookInfoSection h1 {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  line-height: 1.2;
+}
+
+.bookAuthor {
+  font-size: 20px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.bookStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.statBox {
+  text-align: center;
+}
+
+.statBox .label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.statBox .value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bookDescription {
+  padding: 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.bookDescription h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.bookDescription p {
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+
+.reviewsSection {
+  margin-top: 48px;
+}
+
+.reviewsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.reviewsHeader h2 {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.ratingForm {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.ratingForm h3 {
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+.formGroup {
+  margin-bottom: 16px;
+}
+
+.formGroup label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.starRating {
+  display: flex;
+  gap: 8px;
+  font-size: 32px;
+}
+
+.star {
+  cursor: pointer;
+  transition: transform 0.2s;
+  user-select: none;
+}
+
+.star:hover {
+  transform: scale(1.2);
+}
+
+.star.filled {
+  color: #fbbf24;
+}
+
+.star.empty {
+  color: var(--border);
+}
+
+.reviewsList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reviewCard {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.reviewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.reviewUser {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.reviewRating {
+  color: #fbbf24;
+  font-size: 18px;
+}
+
+.reviewComment {
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.emptyReviews {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-muted);
+}
+
+.emptyReviews .icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.loading {
+  text-align: center;
+  padding: 80px 20px;
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.error {
+  max-width: 600px;
+  margin: 80px auto;
+  padding: 24px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--error);
+  border-radius: 12px;
+  color: var(--error);
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .bookContent {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .bookStats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
