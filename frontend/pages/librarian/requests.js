@@ -11,13 +11,10 @@ export default function Requests() {
 
   const [borrowRequests, setBorrowRequests] = useState([]);
   const [returnRequests, setReturnRequests] = useState([]);
-  const [selectedBorrow, setSelectedBorrow] = useState(null);
-  const [selectedReturn, setSelectedReturn] = useState(null);
   const [books, setBooks] = useState({});
-  const [users, setUsers] = useState({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: "", text: "" });
-  const [processing, setProcessing] = useState(false);
+  const [processing, setProcessing] = useState({});
 
   useEffect(() => {
     if (!user || user.role !== "librarian") {
@@ -33,13 +30,12 @@ export default function Requests() {
 
     if (result.ok && result.data?.status === "success") {
       const allRequests = result.data.data || [];
-
-      const pending = allRequests.filter((req) => req.status === "pending");
+      const submitted = allRequests.filter((req) => req.status === "submitted");
       const returning = allRequests.filter(
-        (req) => req.status === "return_requested" || req.status === "approved"
+        (req) => req.status === "return_requested"
       );
 
-      setBorrowRequests(pending);
+      setBorrowRequests(submitted);
       setReturnRequests(returning);
 
       // Load book details
@@ -52,32 +48,22 @@ export default function Requests() {
         }
       }
       setBooks(bookData);
-
-      // Mock user data (in real app, would fetch from API)
-      const userData = {};
-      allRequests.forEach((req) => {
-        userData[req.user_id] = `User ${req.user_id}`;
-      });
-      setUsers(userData);
     }
-
     setLoading(false);
   };
 
-  const handleApproveBorrow = async () => {
-    if (!selectedBorrow) return;
-    setProcessing(true);
+  const handleApproveBorrow = async (requestId) => {
+    setProcessing((prev) => ({ ...prev, [requestId]: true }));
     setMessage({ type: "", text: "" });
 
     const result = await api.approveBorrow(
       { username: user.username, password: user.password },
-      selectedBorrow.id
+      requestId
     );
-    setProcessing(false);
+    setProcessing((prev) => ({ ...prev, [requestId]: false }));
 
     if (result.ok && result.data?.status === "success") {
-      setMessage({ type: "success", text: "Đã phê duyệt yêu cầu mượn sách!" });
-      setSelectedBorrow(null);
+      setMessage({ type: "success", text: "Đã phê duyệt yêu cầu!" });
       setTimeout(() => {
         setMessage({ type: "", text: "" });
         loadRequests();
@@ -90,34 +76,20 @@ export default function Requests() {
     }
   };
 
-  // --- HÀM XỬ LÝ XÓA MỚI ---
-  const handleDeleteBorrow = async () => {
-    if (!selectedBorrow) return;
+  const handleRejectBorrow = async (requestId) => {
+    if (!confirm(`Bạn có chắc chắn muốn từ chối yêu cầu #${requestId}?`)) return;
 
-    // Hỏi xác nhận trước khi xóa
-    if (
-      !confirm(
-        `Bạn có chắc chắn muốn xóa/từ chối yêu cầu #${selectedBorrow.id} không?`
-      )
-    ) {
-      return;
-    }
-
-    setProcessing(true);
+    setProcessing((prev) => ({ ...prev, [requestId]: true }));
     setMessage({ type: "", text: "" });
 
-    // Gọi API xóa (Lưu ý: Bạn cần đảm bảo file api.js đã có hàm deleteBorrowRequest)
-    // Nếu chưa có, bạn cần thêm vào file api.js tương tự như các hàm khác
     const result = await api.deleteBorrowRequest(
       { username: user.username, password: user.password },
-      selectedBorrow.id
+      requestId
     );
-
-    setProcessing(false);
+    setProcessing((prev) => ({ ...prev, [requestId]: false }));
 
     if (result.ok && result.data?.status === "success") {
-      setMessage({ type: "success", text: "Đã xóa yêu cầu thành công!" });
-      setSelectedBorrow(null);
+      setMessage({ type: "success", text: "Đã từ chối yêu cầu!" });
       setTimeout(() => {
         setMessage({ type: "", text: "" });
         loadRequests();
@@ -125,26 +97,23 @@ export default function Requests() {
     } else {
       setMessage({
         type: "error",
-        text: result.data?.message || "Không thể xóa yêu cầu",
+        text: result.data?.message || "Không thể từ chối",
       });
     }
   };
-  // --------------------------
 
-  const handleConfirmReturn = async () => {
-    if (!selectedReturn) return;
-    setProcessing(true);
+  const handleConfirmReturn = async (requestId) => {
+    setProcessing((prev) => ({ ...prev, [requestId]: true }));
     setMessage({ type: "", text: "" });
 
     const result = await api.confirmReturn(
       { username: user.username, password: user.password },
-      selectedReturn.id
+      requestId
     );
-    setProcessing(false);
+    setProcessing((prev) => ({ ...prev, [requestId]: false }));
 
     if (result.ok && result.data?.status === "success") {
       setMessage({ type: "success", text: "Đã xác nhận trả sách!" });
-      setSelectedReturn(null);
       setTimeout(() => {
         setMessage({ type: "", text: "" });
         loadRequests();
@@ -152,28 +121,84 @@ export default function Requests() {
     } else {
       setMessage({
         type: "error",
-        text: result.data?.message || "Không thể xác nhận trả",
+        text: result.data?.message || "Không thể xác nhận",
       });
     }
   };
 
-  const getStatusBadgeClass = (status) => {
-    const map = {
-      pending: styles.pending,
-      approved: styles.approved,
-      return_requested: styles.returnRequested,
-    };
-    return `${styles.requestBadge} ${map[status] || ""}`;
+  const handleConfirmAllReturns = async () => {
+    if (returnRequests.length === 0) {
+      alert("Không có yêu cầu trả nào!");
+      return;
+    }
+
+    if (!confirm(`Xác nhận trả tất cả ${returnRequests.length} yêu cầu?`)) {
+      return;
+    }
+
+    setProcessing({ confirmAll: true });
+    setMessage({ type: "", text: "" });
+
+    const batches = groupByBatch(returnRequests);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const batch of batches) {
+      const firstReqId = batch[0].id;
+      const result = await api.confirmReturn(
+        { username: user.username, password: user.password },
+        firstReqId
+      );
+
+      if (result.ok && result.data?.status === "success") {
+        successCount++;
+      } else {
+        errorCount++;
+      }
+    }
+
+    setProcessing({});
+
+    if (errorCount === 0) {
+      setMessage({
+        type: "success",
+        text: `Đã xác nhận trả ${successCount} phiếu!`,
+      });
+    } else {
+      setMessage({
+        type: "error",
+        text: `Xác nhận ${successCount} phiếu thành công, ${errorCount} phiếu thất bại`,
+      });
+    }
+
+    setTimeout(() => {
+      setMessage({ type: "", text: "" });
+      loadRequests();
+    }, 2000);
   };
 
   const getStatusText = (status) => {
     const map = {
       pending: "Chờ duyệt",
+      submitted: "Chờ duyệt",
       approved: "Đã duyệt",
       return_requested: "Yêu cầu trả",
       returned: "Đã trả",
     };
     return map[status] || status;
+  };
+
+  // Group requests by batch_id
+  const groupByBatch = (requests) => {
+    const batches = {};
+    requests.forEach((req) => {
+      const batchId = req.batch_id || `single_${req.id}`;
+      if (!batches[batchId]) {
+        batches[batchId] = [];
+      }
+      batches[batchId].push(req);
+    });
+    return Object.values(batches);
   };
 
   if (loading) {
@@ -196,212 +221,127 @@ export default function Requests() {
         )}
 
         <div className={styles.requestsGrid}>
-          {/* Left panel: Borrow requests */}
+          {/* Yêu cầu mượn sách */}
           <div className={styles.requestPanel}>
             <div className={styles.panelHeader}>
-              <h2>Yêu cầu mượn sách</h2>
-              <p>Phê duyệt các yêu cầu mượn sách từ người dùng</p>
+              <h2>Yêu cầu mượn sách ({borrowRequests.length})</h2>
             </div>
 
             <div className={styles.requestList}>
-              {borrowRequests.length === 0 && (
+              {borrowRequests.length === 0 ? (
                 <div className={styles.emptyState}>
                   <div className={styles.emptyIcon}>📚</div>
                   <div>Không có yêu cầu mượn nào</div>
                 </div>
+              ) : (
+                groupByBatch(borrowRequests).map((batch, batchIdx) => {
+                  const firstReq = batch[0];
+                  const isProcessing = processing[firstReq.id];
+                  return (
+                    <div key={batchIdx} className={styles.batchCard}>
+                      <div className={styles.batchHeader}>
+                        <span className={styles.batchId}>
+                          Phiếu mượn #{firstReq.id} - User {firstReq.user_id}
+                        </span>
+                        <span className={styles.bookCount}>
+                          {batch.length} sách
+                        </span>
+                      </div>
+                      <div className={styles.batchBooks}>
+                        {batch.map((request) => {
+                          const book = books[request.book_id];
+                          return (
+                            <div key={request.id} className={styles.bookItem}>
+                              • {book?.title || `Book ID ${request.book_id}`}
+                              {book && book.available <= 0 && (
+                                <span className={styles.outOfStock}> (Hết sách)</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className={styles.actionButtons}>
+                        <button
+                          className={styles.btnApprove}
+                          onClick={() => handleApproveBorrow(firstReq.id)}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? "..." : "✓ Phê duyệt phiếu"}
+                        </button>
+                        <button
+                          className={styles.btnReject}
+                          onClick={() => handleRejectBorrow(firstReq.id)}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? "..." : "✕ Từ chối"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
-
-              {borrowRequests.map((request) => {
-                const book = books[request.book_id];
-                return (
-                  <div
-                    key={request.id}
-                    className={`${styles.requestCard} ${
-                      selectedBorrow?.id === request.id ? styles.selected : ""
-                    }`}
-                    onClick={() => setSelectedBorrow(request)}
-                  >
-                    <div className={styles.requestCardHeader}>
-                      <span className={styles.requestId}>
-                        Request #{request.id}
-                      </span>
-                      <span className={getStatusBadgeClass(request.status)}>
-                        {getStatusText(request.status)}
-                      </span>
-                    </div>
-                    <div className={styles.requestInfo}>
-                      <div>
-                        Sách:{" "}
-                        <span>{book?.title || `ID ${request.book_id}`}</span>
-                      </div>
-                      <div>
-                        User:{" "}
-                        <span>{users[request.user_id] || request.user_id}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
-
-            {selectedBorrow && (
-              <div className={styles.detailPanel}>
-                <h3>Chi tiết yêu cầu</h3>
-                <div className={styles.detailGrid}>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>Request ID:</span>
-                    <span className={styles.detailValue}>
-                      {selectedBorrow.id}
-                    </span>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>Book ID:</span>
-                    <span className={styles.detailValue}>
-                      {selectedBorrow.book_id}
-                    </span>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>Tên sách:</span>
-                    <span className={styles.detailValue}>
-                      {books[selectedBorrow.book_id]?.title}
-                    </span>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>User ID:</span>
-                    <span className={styles.detailValue}>
-                      {selectedBorrow.user_id}
-                    </span>
-                  </div>
-                </div>
-
-                {/* --- ĐOẠN CODE NÚT BẤM ĐÃ CẬP NHẬT --- */}
-                <div className={styles.actionButtons}>
-                  <button
-                    className={styles.btnApprove}
-                    onClick={handleApproveBorrow}
-                    disabled={processing}
-                  >
-                    {processing ? "Đang xử lý..." : "Phê duyệt"}
-                  </button>
-
-                  {/* Nút xóa màu đỏ */}
-                  <button
-                    onClick={handleDeleteBorrow}
-                    disabled={processing}
-                    style={{
-                      backgroundColor: "#ef4444",
-                      color: "white",
-                      border: "none",
-                      padding: "10px 20px",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      fontWeight: "600",
-                      marginLeft: "10px",
-                    }}
-                  >
-                    {processing ? "..." : "Từ chối / Xóa"}
-                  </button>
-                </div>
-                {/* ------------------------------------- */}
-              </div>
-            )}
           </div>
 
-          {/* Right panel: Return requests (Giữ nguyên) */}
+          {/* Yêu cầu trả sách */}
           <div className={styles.requestPanel}>
-            {/* ... (Phần code bên phải giữ nguyên không đổi) ... */}
             <div className={styles.panelHeader}>
-              <h2>Yêu cầu trả sách</h2>
-              <p>Xác nhận các yêu cầu trả sách từ người dùng</p>
+              <h2>Yêu cầu trả sách ({returnRequests.length})</h2>
+              {returnRequests.length > 0 && (
+                <button
+                  className={styles.btnConfirmAll}
+                  onClick={handleConfirmAllReturns}
+                  disabled={processing.confirmAll}
+                >
+                  {processing.confirmAll ? "Đang xử lý..." : "✓ Xác nhận toàn bộ"}
+                </button>
+              )}
             </div>
 
             <div className={styles.requestList}>
-              {returnRequests.length === 0 && (
+              {returnRequests.length === 0 ? (
                 <div className={styles.emptyState}>
                   <div className={styles.emptyIcon}>📖</div>
                   <div>Không có yêu cầu trả nào</div>
                 </div>
+              ) : (
+                groupByBatch(returnRequests).map((batch, batchIdx) => {
+                  const firstReq = batch[0];
+                  const isProcessing = processing[firstReq.id];
+                  return (
+                    <div key={batchIdx} className={styles.batchCard}>
+                      <div className={styles.batchHeader}>
+                        <span className={styles.batchId}>
+                          Phiếu trả #{firstReq.id} - User {firstReq.user_id}
+                        </span>
+                        <span className={styles.bookCount}>
+                          {batch.length} sách
+                        </span>
+                      </div>
+                      <div className={styles.batchBooks}>
+                        {batch.map((request) => {
+                          const book = books[request.book_id];
+                          return (
+                            <div key={request.id} className={styles.bookItem}>
+                              • {book?.title || `Book ID ${request.book_id}`} ({getStatusText(request.status)})
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className={styles.actionButtons}>
+                        <button
+                          className={styles.btnConfirm}
+                          onClick={() => handleConfirmReturn(firstReq.id)}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? "..." : "✓ Xác nhận trả phiếu"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
-
-              {returnRequests.map((request) => {
-                const book = books[request.book_id];
-                return (
-                  <div
-                    key={request.id}
-                    className={`${styles.requestCard} ${
-                      selectedReturn?.id === request.id ? styles.selected : ""
-                    }`}
-                    onClick={() => setSelectedReturn(request)}
-                  >
-                    <div className={styles.requestCardHeader}>
-                      <span className={styles.requestId}>
-                        Request #{request.id}
-                      </span>
-                      <span className={getStatusBadgeClass(request.status)}>
-                        {getStatusText(request.status)}
-                      </span>
-                    </div>
-                    <div className={styles.requestInfo}>
-                      <div>
-                        Sách:{" "}
-                        <span>{book?.title || `ID ${request.book_id}`}</span>
-                      </div>
-                      <div>
-                        User:{" "}
-                        <span>{users[request.user_id] || request.user_id}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
-
-            {selectedReturn && (
-              <div className={styles.detailPanel}>
-                <h3>Chi tiết yêu cầu</h3>
-                <div className={styles.detailGrid}>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>Request ID:</span>
-                    <span className={styles.detailValue}>
-                      {selectedReturn.id}
-                    </span>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>Book ID:</span>
-                    <span className={styles.detailValue}>
-                      {selectedReturn.book_id}
-                    </span>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>Tên sách:</span>
-                    <span className={styles.detailValue}>
-                      {books[selectedReturn.book_id]?.title}
-                    </span>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>User ID:</span>
-                    <span className={styles.detailValue}>
-                      {selectedReturn.user_id}
-                    </span>
-                  </div>
-                  <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>Trạng thái:</span>
-                    <span className={styles.detailValue}>
-                      {getStatusText(selectedReturn.status)}
-                    </span>
-                  </div>
-                </div>
-                <div className={styles.actionButtons}>
-                  <button
-                    className={styles.btnConfirm}
-                    onClick={handleConfirmReturn}
-                    disabled={processing}
-                  >
-                    {processing ? "Đang xử lý..." : "Xác nhận trả sách"}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

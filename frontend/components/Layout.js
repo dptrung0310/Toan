@@ -53,9 +53,20 @@ export default function Layout({ children }) {
                   >
                     Sách đã mượn
                   </Link>
+                  <Link
+                    href="/user/history"
+                    className={router.pathname === '/user/history' ? styles.active : ''}
+                  >
+                    Lịch sử mượn
+                  </Link>
                 </>
               )}
             </div>
+            {!isLibrarian && (
+              <Link href="/user/cart" className={styles.cartButton}>
+                🛒 Giỏ mượn
+              </Link>
+            )}
             <div className={styles.userInfo}>
               <span>{user.username}</span>
               <span className={styles.userBadge}>{user.role}</span>

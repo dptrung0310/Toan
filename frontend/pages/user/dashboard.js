@@ -15,7 +15,6 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [borrowing, setBorrowing] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -51,8 +50,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleBorrow = async () => {
-    // Kiểm tra cơ bản
+  const handleBorrow = () => {
     if (!selectedBook) return;
     if (!user || !user.id) {
       alert("Vui lòng đăng nhập lại để thực hiện chức năng này.");
@@ -60,39 +58,26 @@ export default function Dashboard() {
       return;
     }
 
-    setBorrowing(true);
-    setError("");
-
+    // Lấy giỏ hiện tại từ localStorage
+    const cartKey = `cart_${user.id}`;
+    let cart = [];
     try {
-      // Gọi API
-      const result = await api.createBorrowRequest(
-        { username: user.username, password: user.password },
-        selectedBook.id
-      );
-
-      setBorrowing(false);
-
-      // --- XỬ LÝ KẾT QUẢ ---
-      if (result.ok && result.data?.status === "success") {
-        // Trường hợp THÀNH CÔNG
-        alert("✅ Đã gửi yêu cầu mượn sách thành công!");
-        loadBooks(); // Load lại để cập nhật số lượng sách
-      } else {
-        // Trường hợp THẤT BẠI (Đã mượn rồi hoặc hết sách)
-        // Lấy tin nhắn lỗi chính xác từ Server gửi về
-        const serverMsg = result.data?.message || "Có lỗi xảy ra";
-
-        // Hiện Popup thông báo ngay lập tức
-        alert(`⚠️ KHÔNG THỂ MƯỢN:\n${serverMsg}`);
-
-        // Set error state để hiện chữ đỏ (nếu cần)
-        setError(serverMsg);
-      }
-    } catch (err) {
-      setBorrowing(false);
-      alert("Lỗi kết nối đến server!");
-      console.error(err);
+      const stored = localStorage.getItem(cartKey);
+      if (stored) cart = JSON.parse(stored);
+    } catch (e) {
+      console.error("Error loading cart:", e);
     }
+
+    // Kiểm tra trùng
+    if (cart.includes(selectedBook.id)) {
+      alert("Sách này đã có trong giỏ mượn của bạn");
+      return;
+    }
+
+    // Thêm vào giỏ
+    cart.push(selectedBook.id);
+    localStorage.setItem(cartKey, JSON.stringify(cart));
+    alert("✅ Đã thêm vào giỏ mượn sách!");
   };
 
   return (
@@ -165,44 +150,50 @@ export default function Dashboard() {
           {selectedBook && (
             <>
               {error && <div className={styles.error}>{error}</div>}
-              <img
-                src={
-                  selectedBook.url_image ||
-                  "https://picsum.photos/seed/default/400/600"
-                }
-                alt={selectedBook.title}
-                className={styles.detailCover}
-              />
-              <h1 className={styles.detailTitle}>{selectedBook.title}</h1>
-              <div className={styles.detailAuthor}>
-                Tác giả: {selectedBook.author}
-              </div>
-
-              <div className={styles.detailSection}>
-                <h3>Mô tả</h3>
-                <p className={styles.detailDescription}>
-                  {selectedBook.description || "Chưa có mô tả"}
-                </p>
-              </div>
-
-              <div className={styles.detailSection}>
-                <h3>Thông tin</h3>
-                <div className={styles.detailStats}>
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>Tổng số</span>
-                    <span className={styles.statValue}>
-                      {selectedBook.quantity}
-                    </span>
+              
+              <div className={styles.detailContent}>
+                <img
+                  src={
+                    selectedBook.url_image ||
+                    "https://picsum.photos/seed/default/400/600"
+                  }
+                  alt={selectedBook.title}
+                  className={styles.detailCover}
+                />
+                
+                <div className={styles.detailInfo}>
+                  <h1 className={styles.detailTitle}>{selectedBook.title}</h1>
+                  <div className={styles.detailAuthor}>
+                    Tác giả: {selectedBook.author}
                   </div>
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>Còn lại</span>
-                    <span className={styles.statValue}>
-                      {selectedBook.available}
-                    </span>
+
+                  <div className={styles.detailSection}>
+                    <h3>Mô tả</h3>
+                    <p className={styles.detailDescription}>
+                      {selectedBook.description || "Chưa có mô tả"}
+                    </p>
                   </div>
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>Book ID</span>
-                    <span className={styles.statValue}>{selectedBook.id}</span>
+
+                  <div className={styles.detailSection}>
+                    <h3>Thông tin</h3>
+                    <div className={styles.detailStats}>
+                      <div className={styles.statItem}>
+                        <span className={styles.statLabel}>Tổng số</span>
+                        <span className={styles.statValue}>
+                          {selectedBook.quantity}
+                        </span>
+                      </div>
+                      <div className={styles.statItem}>
+                        <span className={styles.statLabel}>Còn lại</span>
+                        <span className={styles.statValue}>
+                          {selectedBook.available}
+                        </span>
+                      </div>
+                      <div className={styles.statItem}>
+                        <span className={styles.statLabel}>Book ID</span>
+                        <span className={styles.statValue}>{selectedBook.id}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -210,9 +201,9 @@ export default function Dashboard() {
               <div className={styles.detailActions}>
                 <button
                   onClick={handleBorrow}
-                  disabled={borrowing || selectedBook.available === 0}
+                  disabled={selectedBook.available === 0}
                 >
-                  {borrowing ? "Đang xử lý..." : "Mượn sách"}
+                  ➕ Thêm vào giỏ
                 </button>
                 <Link href={`/books/${selectedBook.id}`}>
                   <button className={styles.btnSecondary}>Xem chi tiết</button>

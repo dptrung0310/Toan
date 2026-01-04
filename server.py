@@ -13,8 +13,15 @@ DB_PATH = "library.db"
 def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
     return response
+
+
+@app.route('/<path:path>', methods=['OPTIONS'])
+@app.route('/', methods=['OPTIONS'])
+def handle_options(path=None):
+    """Handle CORS preflight requests"""
+    return '', 204
 
 
 def response(status: str, message: str, data: Any = None, http_code: int = 200):
@@ -53,8 +60,10 @@ def init_db():
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				user_id INTEGER NOT NULL,
 				book_id INTEGER NOT NULL,
-				status TEXT NOT NULL CHECK(status IN ('pending','approved','return_requested','returned')),
+				batch_id TEXT,
+				status TEXT NOT NULL CHECK(status IN ('pending','submitted','approved','return_requested','returned')),
 				rating INTEGER,
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY(user_id) REFERENCES users(id),
 				FOREIGN KEY(book_id) REFERENCES books(id)
 			);
@@ -74,6 +83,25 @@ def init_db():
 			"""
 		)
 		conn.commit()
+		
+		# Migrate existing database - thêm cột batch_id và created_at nếu chưa có
+		try:
+			conn.execute("SELECT batch_id FROM borrow_requests LIMIT 1")
+		except sqlite3.OperationalError:
+			# Cột batch_id chưa tồn tại, thêm vào
+			print("⚙️  Migrating database: Adding batch_id column...")
+			conn.execute("ALTER TABLE borrow_requests ADD COLUMN batch_id TEXT")
+			conn.commit()
+			print("✅ Added batch_id column")
+		
+		try:
+			conn.execute("SELECT created_at FROM borrow_requests LIMIT 1")
+		except sqlite3.OperationalError:
+			# Cột created_at chưa tồn tại, thêm vào
+			print("⚙️  Migrating database: Adding created_at column...")
+			conn.execute("ALTER TABLE borrow_requests ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+			conn.commit()
+			print("✅ Added created_at column")
 
 		# Insert sample data if tables are empty
 		if not conn.execute("SELECT 1 FROM users LIMIT 1").fetchone():
@@ -224,53 +252,81 @@ def delete_book(book_id: int):
 
 @app.route("/borrow-requests", methods=["POST"])
 def create_borrow_request():
-    # 1. Lấy dữ liệu và xác thực
+    """Deprecated - Không dùng nữa, chuyển sang batch"""
+    return response("error", "API này đã không dùng, hãy dùng /borrow-requests/batch", http_code=400)
+
+
+# API mới: Tạo batch borrow requests từ localStorage
+@app.route("/borrow-requests/batch", methods=["POST"])
+def create_batch_borrow_requests():
+    """Tạo batch borrow requests từ danh sách book IDs"""
     data = request.get_json(force=True)
     user, err = require_auth(data, role=None)
     if err:
         return err
     
-    # 2. Chuyển đổi book_id sang số nguyên (quan trọng để query chính xác)
-    try:
-        book_id = int(data.get("book_id"))
-    except (ValueError, TypeError):
-        return response("error", "Book ID không hợp lệ", http_code=400)
-
+    book_ids = data.get("book_ids", [])
+    if not book_ids or not isinstance(book_ids, list):
+        return response("error", "book_ids là bắt buộc và phải là array", http_code=400)
+    
+    import uuid
+    batch_id = str(uuid.uuid4())
+    
     with closing(sqlite3.connect(DB_PATH)) as conn:
-        conn.row_factory = sqlite3.Row # Để lấy dữ liệu dạng dictionary
-
-        # 3. Kiểm tra sách có tồn tại và còn hàng không
-        book_row = conn.execute("SELECT id, available, title FROM books WHERE id=?", (book_id,)).fetchone()
-        if not book_row:
-            return response("error", "Sách không tồn tại", http_code=404)
+        conn.row_factory = sqlite3.Row
         
-        # --- LOGIC QUAN TRỌNG NHẤT Ở ĐÂY ---
-        # 4. Kiểm tra xem User ID này đã từng có dòng nào với Book ID này chưa
-        # Bất kể status là 'pending', 'approved', 'returned' hay 'return_requested' đều chặn.
-        existing_req = conn.execute(
-            "SELECT status FROM borrow_requests WHERE user_id=? AND book_id=?", 
-            (user["id"], book_id)
-        ).fetchone()
+        created = []
+        errors = []
         
-        if existing_req:
-            # Nếu tìm thấy dữ liệu -> Báo lỗi ngay
-            status_text = existing_req['status']
-            msg = f"Bạn không thể mượn lại. Sách này đang ở trạng thái: {status_text}"
-            return response("error", msg, http_code=400)
-        # -----------------------------------
-
-        # 5. Kiểm tra số lượng tồn kho
-        if book_row["available"] <= 0:
-            return response("error", "Sách này hiện đã hết hàng", http_code=400)
-
-        # 6. Nếu mọi thứ OK -> Tạo yêu cầu
-        conn.execute(
-            "INSERT INTO borrow_requests (user_id, book_id, status) VALUES (?,?, 'pending')",
-            (user["id"], book_id),
-        )
+        for book_id in book_ids:
+            try:
+                book_id = int(book_id)
+            except (ValueError, TypeError):
+                errors.append(f"Book ID {book_id} không hợp lệ")
+                continue
+            
+            # Kiểm tra sách có tồn tại không
+            book_row = conn.execute("SELECT id, available, title FROM books WHERE id=?", (book_id,)).fetchone()
+            if not book_row:
+                errors.append(f"Sách ID {book_id} không tồn tại")
+                continue
+            
+            # Kiểm tra xem có đang mượn hoặc chờ duyệt không
+            active = conn.execute(
+                "SELECT status FROM borrow_requests WHERE user_id=? AND book_id=? AND status IN ('submitted','approved')", 
+                (user["id"], book_id)
+            ).fetchone()
+            
+            if active:
+                status_map = {'submitted': 'đang chờ duyệt', 'approved': 'đang mượn'}
+                errors.append(f"Bạn {status_map.get(active['status'], 'đã có yêu cầu')} với sách '{book_row['title']}'")
+                continue
+            
+            # Tạo request với status='submitted' và batch_id
+            from datetime import datetime
+            created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            conn.execute(
+                "INSERT INTO borrow_requests (user_id, book_id, status, batch_id, created_at) VALUES (?,?,'submitted',?,?)",
+                (user["id"], book_id, batch_id, created_at),
+            )
+            created.append(book_row['title'])
+        
         conn.commit()
+    
+    if not created:
+        return response("error", "Không tạo được request nào. Lỗi: " + "; ".join(errors), http_code=400)
+    
+    result = {
+        "batch_id": batch_id,
+        "created_count": len(created),
+        "created_books": created
+    }
+    
+    if errors:
+        result["warnings"] = errors
+    
+    return response("success", f"Đã tạo {len(created)} yêu cầu mượn sách", result, 201)
 
-    return response("success", "Gửi yêu cầu mượn thành công", None, 201)
 
 @app.route("/borrow-requests", methods=["GET"])
 def list_borrow_requests():
@@ -290,75 +346,197 @@ def list_borrow_requests():
 	return response("success", "Borrow requests fetched", requests_data)
 
 
+# API mới: Lấy giỏ mượn sách của user
+@app.route("/users/cart", methods=["GET"])
+def get_user_cart():
+	"""Lấy danh sách sách trong giỏ (status='pending') của user hiện tại"""
+	auth_header = request.headers.get("Authorization", "")
+	if not auth_header.startswith("Basic "):
+		return response("error", "Missing credentials", http_code=401)
+	
+	import base64
+	try:
+		decoded = base64.b64decode(auth_header[6:]).decode('utf-8')
+		username, password = decoded.split(':', 1)
+	except:
+		return response("error", "Invalid credentials format", http_code=401)
+	
+	user = get_user(username, password)
+	if not user:
+		return response("error", "Invalid credentials", http_code=401)
+	
+	with closing(sqlite3.connect(DB_PATH)) as conn:
+		conn.row_factory = sqlite3.Row
+		rows = conn.execute(
+			"""SELECT br.*, b.title, b.author, b.url_image, b.available 
+			   FROM borrow_requests br 
+			   JOIN books b ON br.book_id = b.id 
+			   WHERE br.user_id=? AND br.status='pending' 
+			   ORDER BY br.id DESC""",
+			(user["id"],)
+		).fetchall()
+		cart_items = [dict(r) for r in rows]
+	
+	return response("success", "Cart fetched", cart_items)
+
+
+# API mới: Submit giỏ mượn (chuyển pending → submitted)
+@app.route("/users/cart/submit", methods=["POST"])
+def submit_cart():
+	"""Submit giỏ mượn - chuyển tất cả pending requests sang submitted"""
+	data = request.get_json(force=True)
+	user, err = require_auth(data, role=None)
+	if err:
+		return err
+	
+	import uuid
+	batch_id = str(uuid.uuid4())
+	
+	with closing(sqlite3.connect(DB_PATH)) as conn:
+		conn.row_factory = sqlite3.Row
+		
+		# Lấy tất cả pending requests
+		pending = conn.execute(
+			"SELECT * FROM borrow_requests WHERE user_id=? AND status='pending'",
+			(user["id"],)
+		).fetchall()
+		
+		if not pending:
+			return response("error", "Giỏ mượn trống", http_code=400)
+		
+		# Chuyển sang submitted với cùng batch_id
+		conn.execute(
+			"UPDATE borrow_requests SET status='submitted', batch_id=? WHERE user_id=? AND status='pending'",
+			(batch_id, user["id"])
+		)
+		conn.commit()
+	
+	return response("success", f"Đã gửi yêu cầu mượn {len(pending)} sách", {"batch_id": batch_id, "count": len(pending)})
+
+
 @app.route("/borrow-requests/<int:req_id>/approve", methods=["POST"])
 def approve_borrow(req_id: int):
+	"""Duyệt cả batch/phiếu mượn sách - validate tất cả sách trong batch"""
 	data = request.get_json(force=True)
 	user, err = require_auth(data, role="librarian")
 	if err:
 		return err
+	
 	with closing(sqlite3.connect(DB_PATH)) as conn:
 		conn.row_factory = sqlite3.Row
+		
+		# Lấy request để biết batch_id
 		req = conn.execute("SELECT * FROM borrow_requests WHERE id=?", (req_id,)).fetchone()
 		if not req:
 			return response("error", "Request not found", http_code=404)
-		if req["status"] != "pending":
-			return response("error", "Request not pending", http_code=400)
-		book = conn.execute("SELECT available FROM books WHERE id=?", (req["book_id"],)).fetchone()
-		if not book or book["available"] <= 0:
-			return response("error", "Book unavailable", http_code=400)
-		conn.execute("UPDATE books SET available=available-1 WHERE id=?", (req["book_id"],))
-		conn.execute("UPDATE borrow_requests SET status='approved' WHERE id=?", (req_id,))
+		
+		if req["status"] != "submitted":
+			return response("error", "Request not submitted", http_code=400)
+		
+		batch_id = req["batch_id"]
+		if not batch_id:
+			return response("error", "Invalid batch", http_code=400)
+		
+		# Lấy tất cả requests trong cùng batch
+		batch_requests = conn.execute(
+			"SELECT * FROM borrow_requests WHERE batch_id=? AND status='submitted'",
+			(batch_id,)
+		).fetchall()
+		
+		# Validate tất cả sách trong batch
+		unavailable_books = []
+		for br in batch_requests:
+			book = conn.execute("SELECT id, title, available FROM books WHERE id=?", (br["book_id"],)).fetchone()
+			if not book or book["available"] <= 0:
+				unavailable_books.append({
+					"book_id": br["book_id"],
+					"title": book["title"] if book else "Unknown",
+					"available": book["available"] if book else 0
+				})
+		
+		# Nếu có sách hết → Reject và báo lỗi
+		if unavailable_books:
+			error_msg = "Không thể duyệt phiếu mượn. Các sách sau đã hết: " + ", ".join([f"{b['title']}" for b in unavailable_books])
+			return response("error", error_msg, {"unavailable": unavailable_books}, http_code=400)
+		
+		# Nếu OK → Approve tất cả và trừ available
+		for br in batch_requests:
+			conn.execute("UPDATE books SET available=available-1 WHERE id=?", (br["book_id"],))
+			conn.execute("UPDATE borrow_requests SET status='approved' WHERE id=?", (br["id"],))
+		
 		conn.commit()
-	return response("success", "Request approved")
+	
+	return response("success", f"Đã duyệt phiếu mượn {len(batch_requests)} sách", {"count": len(batch_requests)})
 
 
 @app.route("/borrow-requests/<int:req_id>/return", methods=["POST"])
 def request_return(req_id: int):
-    data = request.get_json(force=True)
-    user, err = require_auth(data, role=None)
-    if err:
-        return err
+	"""Yêu cầu trả sách - áp dụng cho cả batch"""
+	data = request.get_json(force=True)
+	user, err = require_auth(data, role=None)
+	if err:
+		return err
 
-    with closing(sqlite3.connect(DB_PATH)) as conn:
-        # --- THÊM DÒNG QUAN TRỌNG NÀY ---
-        conn.row_factory = sqlite3.Row  
-        # --------------------------------
-        
-        req = conn.execute("SELECT * FROM borrow_requests WHERE id=? AND user_id=?", (req_id, user["id"])).fetchone()
-        
-        if not req:
-            return response("error", "Request not found for user", http_code=404)
-        
-        # Lỗi 500 xảy ra tại dòng dưới đây nếu thiếu dòng 'row_factory' ở trên
-        if req["status"] != "approved":
-            return response("error", "Cannot mark return for this state", http_code=400)
-            
-        conn.execute("UPDATE borrow_requests SET status='return_requested' WHERE id=?", (req_id,))
-        conn.commit()
-        
-    return response("success", "Return requested")
+	with closing(sqlite3.connect(DB_PATH)) as conn:
+		conn.row_factory = sqlite3.Row  
+		
+		req = conn.execute("SELECT * FROM borrow_requests WHERE id=? AND user_id=?", (req_id, user["id"])).fetchone()
+		
+		if not req:
+			return response("error", "Request not found for user", http_code=404)
+		
+		if req["status"] != "approved":
+			return response("error", "Cannot request return for this state", http_code=400)
+		
+		batch_id = req["batch_id"]
+		if not batch_id:
+			return response("error", "Invalid batch", http_code=400)
+		
+		# Chuyển tất cả sách trong batch sang return_requested
+		result = conn.execute(
+			"UPDATE borrow_requests SET status='return_requested' WHERE batch_id=? AND status='approved'",
+			(batch_id,)
+		)
+		conn.commit()
+		
+	return response("success", f"Đã gửi yêu cầu trả {result.rowcount} sách trong phiếu", {"count": result.rowcount})
 
 @app.route("/borrow-requests/<int:req_id>/confirm-return", methods=["POST"])
 def confirm_return(req_id: int):
-    data = request.get_json(force=True)
-    user, err = require_auth(data, role="librarian")
-    if err:
-        return err
-    with closing(sqlite3.connect(DB_PATH)) as conn:
-        # --- THÊM DÒNG NÀY ---
-        conn.row_factory = sqlite3.Row
-        # ---------------------
-        
-        req = conn.execute("SELECT * FROM borrow_requests WHERE id=?", (req_id,)).fetchone()
-        if not req:
-            return response("error", "Request not found", http_code=404)
-        if req["status"] not in ("approved", "return_requested"):
-            return response("error", "Invalid state for return", http_code=400)
-            
-        conn.execute("UPDATE books SET available=available+1 WHERE id=?", (req["book_id"],))
-        conn.execute("UPDATE borrow_requests SET status='returned' WHERE id=?", (req_id,))
-        conn.commit()
-    return response("success", "Return confirmed")
+	"""Xác nhận trả sách - áp dụng cho cả batch"""
+	data = request.get_json(force=True)
+	user, err = require_auth(data, role="librarian")
+	if err:
+		return err
+	
+	with closing(sqlite3.connect(DB_PATH)) as conn:
+		conn.row_factory = sqlite3.Row
+		
+		req = conn.execute("SELECT * FROM borrow_requests WHERE id=?", (req_id,)).fetchone()
+		if not req:
+			return response("error", "Request not found", http_code=404)
+		
+		if req["status"] not in ("approved", "return_requested"):
+			return response("error", "Invalid state for return", http_code=400)
+		
+		batch_id = req["batch_id"]
+		if not batch_id:
+			return response("error", "Invalid batch", http_code=400)
+		
+		# Lấy tất cả requests trong batch
+		batch_requests = conn.execute(
+			"SELECT * FROM borrow_requests WHERE batch_id=? AND status IN ('approved', 'return_requested')",
+			(batch_id,)
+		).fetchall()
+		
+		# Trả tất cả sách trong batch
+		for br in batch_requests:
+			conn.execute("UPDATE books SET available=available+1 WHERE id=?", (br["book_id"],))
+			conn.execute("UPDATE borrow_requests SET status='returned' WHERE id=?", (br["id"],))
+		
+		conn.commit()
+	
+	return response("success", f"Đã xác nhận trả {len(batch_requests)} sách trong phiếu", {"count": len(batch_requests)})
 
 @app.route("/books/<int:book_id>/rating", methods=["POST"])
 def rate_book(book_id: int):
@@ -401,36 +579,39 @@ def health_check():
 # --- SỬA LẠI ĐOẠN NÀY ---
 # --- SỬA LẠI HÀM NÀY TRONG SERVER.PY ---
 
-@app.route("/borrow-requests/<int:req_id>", methods=["DELETE", "OPTIONS"]) # 1. Thêm phương thức OPTIONS
+@app.route("/borrow-requests/<int:req_id>", methods=["DELETE", "OPTIONS"])
 def delete_borrow_request(req_id: int):
-    # 2. Nếu trình duyệt gửi lệnh thăm dò (OPTIONS), trả về OK ngay lập tức
-    # (Đừng cố đọc JSON ở bước này vì body nó rỗng)
-    if request.method == "OPTIONS":
-        return response("success", "OK")
+	"""Xóa sách khỏi giỏ hoặc xóa request (librarian)"""
+	if request.method == "OPTIONS":
+		return response("success", "OK")
 
-    # 3. Code xử lý xóa thật (chỉ chạy khi method là DELETE)
-    # Lúc này mới đọc JSON
-    try:
-        data = request.get_json(force=True)
-    except:
-        return response("error", "Invalid JSON body", http_code=400)
+	try:
+		data = request.get_json(force=True)
+	except:
+		return response("error", "Invalid JSON body", http_code=400)
 
-    # Xác thực quyền Admin
-    user, err = require_auth(data, role="librarian")
-    if err:
-        return err
+	user, err = require_auth(data, role=None)
+	if err:
+		return err
 
-    with closing(sqlite3.connect(DB_PATH)) as conn:
-        # Kiểm tra xem yêu cầu có tồn tại không
-        req = conn.execute("SELECT * FROM borrow_requests WHERE id=?", (req_id,)).fetchone()
-        if not req:
-            return response("error", "Request not found", http_code=404)
-        
-        # Thực hiện xóa
-        conn.execute("DELETE FROM borrow_requests WHERE id=?", (req_id,))
-        conn.commit()
+	with closing(sqlite3.connect(DB_PATH)) as conn:
+		conn.row_factory = sqlite3.Row
+		
+		req = conn.execute("SELECT * FROM borrow_requests WHERE id=?", (req_id,)).fetchone()
+		if not req:
+			return response("error", "Request not found", http_code=404)
+		
+		# User chỉ có thể xóa request của mình và chỉ khi status='pending' (trong giỏ)
+		if user["role"] != "librarian":
+			if req["user_id"] != user["id"]:
+				return response("error", "Forbidden", http_code=403)
+			if req["status"] != "pending":
+				return response("error", "Chỉ có thể xóa sách trong giỏ mượn", http_code=400)
+		
+		conn.execute("DELETE FROM borrow_requests WHERE id=?", (req_id,))
+		conn.commit()
 
-    return response("success", "Đã xóa yêu cầu mượn sách thành công")
+	return response("success", "Đã xóa thành công")
 
 if __name__ == "__main__":
 	init_db()

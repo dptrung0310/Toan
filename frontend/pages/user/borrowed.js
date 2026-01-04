@@ -49,9 +49,9 @@ export default function BorrowedBooks() {
       if (result.ok && result.data?.status === "success") {
         const allRequests = result.data.data || [];
 
-        // Chỉ lấy request của user hiện tại
+        // Chỉ lấy request của user hiện tại VÀ status='approved' (đang mượn)
         const userRequests = allRequests.filter(
-          (req) => req.user_id === user.id
+          (req) => req.user_id === user.id && req.status === "approved"
         );
         setRequests(userRequests);
 
@@ -184,63 +184,69 @@ export default function BorrowedBooks() {
           {selectedRequest && selectedBook && (
             <>
               {error && <div className={styles.error}>{error}</div>}
-              <img
-                src={
-                  selectedBook.url_image ||
-                  "https://picsum.photos/seed/default/400/600"
-                }
-                alt={selectedBook.title}
-                className={styles.detailCover}
-              />
-              <h1 className={styles.detailTitle}>{selectedBook.title}</h1>
-              <div className={styles.detailAuthor}>
-                Tác giả: {selectedBook.author}
-              </div>
-
-              <div className={styles.detailSection}>
-                <h3>Trạng thái</h3>
-                <div
-                  style={{
-                    display: "inline-block",
-                    padding: "8px 16px",
-                    borderRadius: "8px",
-                    background: getStatusColor(selectedRequest.status),
-                    color: "white",
-                    fontWeight: 500,
-                  }}
-                >
-                  {getStatusText(selectedRequest.status)}
-                </div>
-              </div>
-
-              <div className={styles.detailSection}>
-                <h3>Mô tả</h3>
-                <p className={styles.detailDescription}>
-                  {selectedBook.description || "Chưa có mô tả"}
-                </p>
-              </div>
-
-              <div className={styles.detailSection}>
-                <h3>Thông tin yêu cầu</h3>
-                <div className={styles.detailStats}>
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>Request ID</span>
-                    <span className={styles.statValue}>
-                      {selectedRequest.id}
-                    </span>
+              
+              <div className={styles.detailContent}>
+                <img
+                  src={
+                    selectedBook.url_image ||
+                    "https://picsum.photos/seed/default/400/600"
+                  }
+                  alt={selectedBook.title}
+                  className={styles.detailCover}
+                />
+                
+                <div className={styles.detailInfo}>
+                  <h1 className={styles.detailTitle}>{selectedBook.title}</h1>
+                  <div className={styles.detailAuthor}>
+                    Tác giả: {selectedBook.author}
                   </div>
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>Book ID</span>
-                    <span className={styles.statValue}>{selectedBook.id}</span>
-                  </div>
-                  {selectedRequest.rating && (
-                    <div className={styles.statItem}>
-                      <span className={styles.statLabel}>Đánh giá</span>
-                      <span className={styles.statValue}>
-                        ⭐ {selectedRequest.rating}
-                      </span>
+
+                  <div className={styles.detailSection}>
+                    <h3>Trạng thái</h3>
+                    <div
+                      style={{
+                        display: "inline-block",
+                        padding: "8px 16px",
+                        borderRadius: "8px",
+                        background: getStatusColor(selectedRequest.status),
+                        color: "white",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {getStatusText(selectedRequest.status)}
                     </div>
-                  )}
+                  </div>
+
+                  <div className={styles.detailSection}>
+                    <h3>Mô tả</h3>
+                    <p className={styles.detailDescription}>
+                      {selectedBook.description || "Chưa có mô tả"}
+                    </p>
+                  </div>
+
+                  <div className={styles.detailSection}>
+                    <h3>Thông tin yêu cầu</h3>
+                    <div className={styles.detailStats}>
+                      <div className={styles.statItem}>
+                        <span className={styles.statLabel}>Request ID</span>
+                        <span className={styles.statValue}>
+                          {selectedRequest.id}
+                        </span>
+                      </div>
+                      <div className={styles.statItem}>
+                        <span className={styles.statLabel}>Book ID</span>
+                        <span className={styles.statValue}>{selectedBook.id}</span>
+                      </div>
+                      {selectedRequest.rating && (
+                        <div className={styles.statItem}>
+                          <span className={styles.statLabel}>Đánh giá</span>
+                          <span className={styles.statValue}>
+                            ⭐ {selectedRequest.rating}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 

@@ -138,35 +138,41 @@ export default function LibrarianDashboard() {
           {selectedBook && (
             <>
               {error && <div className={styles.error}>{error}</div>}
-              <img
-                src={selectedBook.url_image || 'https://picsum.photos/seed/default/400/600'}
-                alt={selectedBook.title}
-                className={styles.detailCover}
-              />
-              <h1 className={styles.detailTitle}>{selectedBook.title}</h1>
-              <div className={styles.detailAuthor}>Tác giả: {selectedBook.author}</div>
+              
+              <div className={styles.detailContent}>
+                <img
+                  src={selectedBook.url_image || 'https://picsum.photos/seed/default/400/600'}
+                  alt={selectedBook.title}
+                  className={styles.detailCover}
+                />
+                
+                <div className={styles.detailInfo}>
+                  <h1 className={styles.detailTitle}>{selectedBook.title}</h1>
+                  <div className={styles.detailAuthor}>Tác giả: {selectedBook.author}</div>
 
-              <div className={styles.detailSection}>
-                <h3>Mô tả</h3>
-                <p className={styles.detailDescription}>
-                  {selectedBook.description || 'Chưa có mô tả'}
-                </p>
-              </div>
+                  <div className={styles.detailSection}>
+                    <h3>Mô tả</h3>
+                    <p className={styles.detailDescription}>
+                      {selectedBook.description || 'Chưa có mô tả'}
+                    </p>
+                  </div>
 
-              <div className={styles.detailSection}>
-                <h3>Thông tin</h3>
-                <div className={styles.detailStats}>
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>Tổng số</span>
-                    <span className={styles.statValue}>{selectedBook.quantity}</span>
-                  </div>
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>Còn lại</span>
-                    <span className={styles.statValue}>{selectedBook.available}</span>
-                  </div>
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>Book ID</span>
-                    <span className={styles.statValue}>{selectedBook.id}</span>
+                  <div className={styles.detailSection}>
+                    <h3>Thông tin</h3>
+                    <div className={styles.detailStats}>
+                      <div className={styles.statItem}>
+                        <span className={styles.statLabel}>Tổng số</span>
+                        <span className={styles.statValue}>{selectedBook.quantity}</span>
+                      </div>
+                      <div className={styles.statItem}>
+                        <span className={styles.statLabel}>Còn lại</span>
+                        <span className={styles.statValue}>{selectedBook.available}</span>
+                      </div>
+                      <div className={styles.statItem}>
+                        <span className={styles.statLabel}>Book ID</span>
+                        <span className={styles.statValue}>{selectedBook.id}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -178,7 +184,7 @@ export default function LibrarianDashboard() {
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
-                  style={{ background: 'var(--error)' }}
+                  className={styles.btnDelete}
                 >
                   {deleting ? 'Đang xóa...' : 'Xóa sách'}
                 </button>

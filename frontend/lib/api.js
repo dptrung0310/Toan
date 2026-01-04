@@ -48,6 +48,11 @@ export const api = {
 
   deleteBorrowRequest: (creds, id) =>
     callApi(`/borrow-requests/${id}`, "DELETE", creds),
+  
+  // Cart - Giỏ mượn sách (localStorage-based)
+  submitCartBatch: (creds, bookIds) =>
+    callApi("/borrow-requests/batch", "POST", { ...creds, book_ids: bookIds }),
+  
   // Borrow
   createBorrowRequest: (creds, book_id) =>
     callApi("/borrow-requests", "POST", { ...creds, book_id }),

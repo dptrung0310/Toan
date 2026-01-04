@@ -1,47 +1,68 @@
 .requestsPage {
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 40px 20px;
+  padding: 20px;
 }
 
 .pageTitle {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 600;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 
 .requestsGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  height: calc(100vh - 200px);
+  gap: 20px;
+  max-height: calc(100vh - 150px);
 }
 
 .requestPanel {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: 12px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .panelHeader {
-  margin-bottom: 20px;
-  padding-bottom: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .panelHeader h2 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin: 0;
 }
 
-.panelHeader p {
-  font-size: 13px;
-  color: var(--text-muted);
+.btnConfirmAll {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btnConfirmAll:hover:not(:disabled) {
+  background: #4338ca;
+  transform: translateY(-1px);
+}
+
+.btnConfirmAll:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .requestList {
@@ -49,8 +70,9 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding-right: 8px;
+  max-height: 580px;
 }
 
 .requestList::-webkit-scrollbar {
@@ -70,31 +92,77 @@
 .requestCard {
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  cursor: pointer;
+  border-radius: 10px;
+  padding: 14px;
   transition: all 0.2s;
 }
 
 .requestCard:hover {
   border-color: var(--accent);
-  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.requestCard.selected {
+.batchCard {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  transition: all 0.2s;
+}
+
+.batchCard:hover {
   border-color: var(--accent);
-  background: rgba(99, 102, 241, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.batchHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.batchId {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.bookCount {
+  font-size: 12px;
+  padding: 3px 8px;
+  background: var(--accent);
+  color: white;
+  border-radius: 12px;
+}
+
+.batchBooks {
+  margin-bottom: 10px;
+}
+
+.bookItem {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.outOfStock {
+  color: #ef4444;
+  font-weight: 600;
 }
 
 .requestCardHeader {
   display: flex;
   justify-content: space-between;
-  align-items: start;
-  margin-bottom: 12px;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
 .requestId {
   font-weight: 600;
+  font-size: 14px;
   color: var(--text-primary);
 }
 
@@ -121,79 +189,57 @@
 }
 
 .requestInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.requestInfo div {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.requestInfo span {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.detailPanel {
-  background: var(--bg-primary);
-  border-radius: 12px;
-  padding: 20px;
-  margin-top: 16px;
-}
-
-.detailPanel h3 {
-  font-size: 16px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.detailGrid {
-  display: grid;
-  gap: 12px;
-}
-
-.detailItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-}
-
-.detailLabel {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.detailValue {
+  margin-bottom: 10px;
   font-size: 14px;
-  font-weight: 500;
   color: var(--text-primary);
 }
 
 .actionButtons {
   display: flex;
-  gap: 12px;
-  margin-top: 20px;
+  gap: 8px;
 }
 
 .actionButtons button {
   flex: 1;
-  padding: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.actionButtons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btnApprove {
-  background: var(--success);
+  background: #10b981;
+  color: white;
 }
 
-.btnApprove:hover {
+.btnApprove:hover:not(:disabled) {
   background: #059669;
+}
+
+.btnReject {
+  background: #ef4444;
+  color: white;
+}
+
+.btnReject:hover:not(:disabled) {
+  background: #dc2626;
 }
 
 .btnConfirm {
   background: var(--accent);
+  color: white;
+}
+
+.btnConfirm:hover:not(:disabled) {
+  background: #4f46e5;
 }
 
 .emptyState {
@@ -221,27 +267,28 @@
   border-radius: 8px;
   margin-bottom: 16px;
   font-size: 14px;
+  text-align: center;
 }
 
 .message.success {
   background: rgba(16, 185, 129, 0.1);
-  border: 1px solid var(--success);
-  color: var(--success);
+  border: 1px solid #10b981;
+  color: #10b981;
 }
 
 .message.error {
   background: rgba(239, 68, 68, 0.1);
-  border: 1px solid var(--error);
-  color: var(--error);
+  border: 1px solid #ef4444;
+  color: #ef4444;
 }
 
 @media (max-width: 1024px) {
   .requestsGrid {
     grid-template-columns: 1fr;
-    height: auto;
+    max-height: none;
   }
 
   .requestPanel {
-    height: 500px;
+    max-height: 500px;
   }
 }
