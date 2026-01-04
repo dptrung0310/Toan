@@ -431,8 +431,12 @@ def delete_borrow_request(req_id: int):
 def health_check():
     return response("success", "OK")
 
-if __name__ == "__main__":
+try:
     init_db()
-    # Dùng PORT từ Render cấp
+except Exception as e:
+    print(f"⚠️ Could not init DB (might already exist): {e}")
+
+if __name__ == "__main__":
+    # Chạy local
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
